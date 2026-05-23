@@ -1,4 +1,4 @@
-# ⚡ TaskFlow Pro — Modern Task Management Application
+# ⚡ Modern Task Management Application
 
 <div align="center">
   <p></p>
