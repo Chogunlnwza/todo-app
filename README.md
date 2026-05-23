@@ -9,8 +9,6 @@
 
 <h2 id="english">English Version</h2>
 
-## English
-
 TaskFlow Pro is a modern, premium multi-user task and project management application built with a stunning **Dark-Gradient Glassmorphism** user interface. It combines beautiful visual aesthetics with rich productivity features like analytics dashboard, drag-and-drop Kanban board, and inline task updates.
 
 ### ✨ Key Features
@@ -60,7 +58,7 @@ TaskFlow Pro is a modern, premium multi-user task and project management applica
 
 ---
 
-## ภาษาไทย (Thai)
+<h2 id="english">ภาษาไทย</h2>
 
 TaskFlow Pro คือแอปพลิเคชันระบบจัดการงาน (To-Do / Kanban) แบบ Multi-User ยุคใหม่ ที่ออกแบบมาด้วยหน้าต่างการใช้งานสไตล์ **Modern Dark-Gradient / Glassmorphism** (ธีมมืดกระจกฝ้า) ที่สวยงาม พรีเมียม และมีระดับ พร้อมระบบวิเคราะห์สถิติมุมมองแดชบอร์ด และการจัดการงานแบบเรียลไทม์
 
