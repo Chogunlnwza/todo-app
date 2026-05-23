@@ -1,7 +1,7 @@
 # ⚡ TaskFlow Pro - Modern Task Management Application
 
 <div align="center">
-  <p></p>
+  <p>TaskFlow Pro — a modern task and project management platform featuring a premium dark glassmorphism interface, drag-and-drop Kanban board, analytics dashboard, and real-time task</p>
   <a href="#english">English</a> | <a href="#ภาษาไทย">ภาษาไทย</a>
 </div>
 
