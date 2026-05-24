@@ -243,7 +243,7 @@ export default function TasksPage() {
       ) : tasks.length === 0 ? (
         <EmptyState onAdd={() => setShowModal(true)} hasFilters={activeFilters > 0 || !!filters.search} />
       ) : viewMode === "list" ? (
-        <div className="space-y-2.5 stagger">
+        <div className="space-y-2.5 stagger min-h-[550px]">
           {tasks.map((task: Record<string, unknown>) => (
             <TaskCard
               key={task.id as string}
