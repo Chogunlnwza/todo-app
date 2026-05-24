@@ -36,14 +36,19 @@ export async function GET(req: NextRequest) {
     isArchived: archived,
   }
 
-  if (assignedToMe) {
+  where.OR = [
+    { userId: session.user.id },
+    { assignees: { some: { userId: session.user.id } } },
+  ]
+
+  /*{if (assignedToMe) {
     where.OR = [
       { userId: session.user.id },
       { assignees: { some: { userId: session.user.id } } },
     ]
   } else {
     where.userId = session.user.id
-  }
+  }}*/
 
   if (status && status !== "ALL") where.status = status as TaskStatus
   if (priority && priority !== "ALL") where.priority = priority as Priority
@@ -96,8 +101,8 @@ export async function POST(req: NextRequest) {
         categoryId: data.categoryId || null,
         subtasks: data.subtasks
           ? {
-              create: data.subtasks.map((s, i) => ({ title: s.title, orderIndex: i })),
-            }
+            create: data.subtasks.map((s, i) => ({ title: s.title, orderIndex: i })),
+          }
           : undefined,
         assignees: data.assigneeIds
           ? { create: data.assigneeIds.map((uid) => ({ userId: uid })) }

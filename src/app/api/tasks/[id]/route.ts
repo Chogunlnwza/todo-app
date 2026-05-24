@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { TaskStatus, Priority } from "@prisma/client"
+import { sendTaskAssignedEmail } from "@/lib/email"
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).optional(),
@@ -21,13 +22,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  const userId = session.user.id as string
   const { id } = await params
+
   const task = await prisma.task.findFirst({
     where: {
       id,
       OR: [
-        { userId: session.user.id },
-        { assignees: { some: { userId: session.user.id } } },
+        { userId },
+        { assignees: { some: { userId } } },
       ],
     },
     include: {
@@ -50,41 +53,57 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  const userId = session.user.id as string
+  const userName = session.user.name as string | null
   const { id } = await params
 
+  // อนุญาตทั้งเจ้าของงานและ assignee ให้แก้ไขได้
   const task = await prisma.task.findFirst({
-    where: { id, userId: session.user.id },
+    where: {
+      id,
+      OR: [
+        { userId },
+        { assignees: { some: { userId } } },
+      ],
+    },
   })
   if (!task) return NextResponse.json({ error: "ไม่พบงาน" }, { status: 404 })
+
+  const isOwner = task.userId === userId
 
   try {
     const body = await req.json()
     const data = updateTaskSchema.parse(body)
 
-    const completedAt = data.status === "DONE" && task.status !== "DONE"
+    // assignee แก้ได้แค่ status กับ subtasks (ไม่ใช่เจ้าของ)
+    const allowedData = isOwner ? data : {
+      status: data.status,
+    }
+
+    const completedAt = allowedData.status === "DONE" && task.status !== "DONE"
       ? new Date()
-      : data.status !== "DONE"
+      : allowedData.status !== "DONE"
       ? null
       : task.completedAt
 
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
-        ...( data.title !== undefined && { title: data.title }),
-        ...( data.description !== undefined && { description: data.description }),
-        ...( data.status !== undefined && { status: data.status, completedAt }),
-        ...( data.priority !== undefined && { priority: data.priority }),
-        ...( data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
-        ...( data.reminderAt !== undefined && { reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }),
-        ...( data.categoryId !== undefined && { categoryId: data.categoryId }),
-        ...( data.isArchived !== undefined && { isArchived: data.isArchived }),
-        ...(data.tagIds !== undefined && {
+        ...( allowedData.status !== undefined && { status: allowedData.status, completedAt }),
+        ...( isOwner && data.title !== undefined && { title: data.title }),
+        ...( isOwner && data.description !== undefined && { description: data.description }),
+        ...( isOwner && data.priority !== undefined && { priority: data.priority }),
+        ...( isOwner && data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
+        ...( isOwner && data.reminderAt !== undefined && { reminderAt: data.reminderAt ? new Date(data.reminderAt) : null }),
+        ...( isOwner && data.categoryId !== undefined && { categoryId: data.categoryId || null }),
+        ...( isOwner && data.isArchived !== undefined && { isArchived: data.isArchived }),
+        ...( isOwner && data.tagIds !== undefined && {
           tags: {
             deleteMany: {},
-            create: data.tagIds.map((tid) => ({ tagId: tid })),
+            create: data.tagIds.filter((t) => t !== "").map((tid) => ({ tagId: tid })),
           },
         }),
-        ...(data.assigneeIds !== undefined && {
+        ...( isOwner && data.assigneeIds !== undefined && {
           assignees: {
             deleteMany: {},
             create: data.assigneeIds.map((uid) => ({ userId: uid })),
@@ -98,6 +117,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         tags: { include: { tag: true } },
       },
     })
+
+    // ── ส่งอีเมลแจ้งเตือนเมื่อมีการ assign งาน (เฉพาะเจ้าของ) ──
+    if (isOwner && data.assigneeIds && data.assigneeIds.length > 0) {
+      const newAssignees = await prisma.user.findMany({
+        where: { id: { in: data.assigneeIds } },
+        select: { id: true, name: true, email: true },
+      })
+
+      await Promise.allSettled(
+        newAssignees
+          .filter((u) => u.id !== userId)
+          .map((u) =>
+            sendTaskAssignedEmail({
+              toEmail: u.email!,
+              toName: u.name || "ผู้ใช้งาน",
+              taskTitle: updatedTask.title,
+              assignedByName: userName || "ผู้ดูแลระบบ",
+              taskId: updatedTask.id,
+            })
+          )
+      )
+    }
 
     return NextResponse.json({ task: updatedTask })
   } catch (error) {
@@ -113,8 +154,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  const userId = session.user.id as string
   const { id } = await params
-  const task = await prisma.task.findFirst({ where: { id, userId: session.user.id } })
+
+  // ลบได้แค่เจ้าของงานเท่านั้น
+  const task = await prisma.task.findFirst({ where: { id, userId } })
   if (!task) return NextResponse.json({ error: "ไม่พบงาน" }, { status: 404 })
 
   await prisma.task.delete({ where: { id } })

@@ -7,13 +7,21 @@ export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const userId = session.user.id
+  const userId = session.user.id as string
   const now = new Date()
   const todayStart = startOfDay(now)
   const todayEnd = endOfDay(now)
   const weekStart = startOfWeek(now, { weekStartsOn: 1 })
   const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
   const next7Days = addDays(now, 7)
+
+  // เงื่อนไขรวมทั้งงานที่สร้างเองและงานที่ถูก assign
+  const taskOwnerOrAssignee = {
+    OR: [
+      { userId },
+      { assignees: { some: { userId } } },
+    ],
+  }
 
   const [
     totalTasks,
@@ -26,33 +34,39 @@ export async function GET() {
     upcomingTasks,
     completedThisWeek,
   ] = await Promise.all([
-    prisma.task.count({ where: { userId, isArchived: false } }),
+    prisma.task.count({
+      where: { ...taskOwnerOrAssignee, isArchived: false },
+    }),
     prisma.task.count({
       where: {
-        userId,
+        ...taskOwnerOrAssignee,
         status: "DONE",
         completedAt: { gte: todayStart, lte: todayEnd },
       },
     }),
     prisma.task.count({
       where: {
-        userId,
+        ...taskOwnerOrAssignee,
         isArchived: false,
         status: { notIn: ["DONE", "CANCELLED"] },
         dueDate: { lt: now },
       },
     }),
     prisma.task.count({
-      where: { userId, status: "IN_PROGRESS", isArchived: false },
+      where: { ...taskOwnerOrAssignee, status: "IN_PROGRESS", isArchived: false },
     }),
     prisma.task.groupBy({
       by: ["status"],
-      where: { userId, isArchived: false },
+      where: { ...taskOwnerOrAssignee, isArchived: false },
       _count: { status: true },
     }),
     prisma.task.groupBy({
       by: ["priority"],
-      where: { userId, isArchived: false, status: { notIn: ["DONE", "CANCELLED"] } },
+      where: {
+        ...taskOwnerOrAssignee,
+        isArchived: false,
+        status: { notIn: ["DONE", "CANCELLED"] },
+      },
       _count: { priority: true },
     }),
     prisma.category.findMany({
@@ -67,7 +81,7 @@ export async function GET() {
     }),
     prisma.task.findMany({
       where: {
-        userId,
+        ...taskOwnerOrAssignee,
         isArchived: false,
         status: { notIn: ["DONE", "CANCELLED"] },
         dueDate: { gte: now, lte: next7Days },
@@ -78,7 +92,7 @@ export async function GET() {
     }),
     prisma.task.count({
       where: {
-        userId,
+        ...taskOwnerOrAssignee,
         status: "DONE",
         completedAt: { gte: weekStart, lte: weekEnd },
       },

@@ -18,11 +18,9 @@ export default function TasksPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
-
   const [viewMode, setViewMode] = useState<ViewMode>("list")
   const [showModal, setShowModal] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
-
   const [filters, setFilters] = useState({
     search: searchParams.get("search") || "",
     status: searchParams.get("status") || "ALL",
@@ -30,6 +28,23 @@ export default function TasksPage() {
     categoryId: searchParams.get("categoryId") || "",
     tagId: "",
   })
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      // ไม่ทำงานถ้ากำลังพิมพ์ใน input / textarea
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+
+      if (e.key === "c" || e.key === "C" || e.key === "แ" || e.key === "ฉ") {
+        e.preventDefault()
+        setShowModal(true)
+        setSelectedTaskId(null)
+      }
+    }
+
+    window.addEventListener("keydown", handleKey)
+    return () => window.removeEventListener("keydown", handleKey)
+  }, [])
 
   useEffect(() => {
     const id = searchParams.get("id")
@@ -110,7 +125,7 @@ export default function TasksPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-extrabold text-white flex items-center gap-2.5">
-            <CheckCircle2 size={24} className="text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" /> 
+            <CheckCircle2 size={24} className="text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" />
             <span>งานทั้งหมดของคุณ</span>
           </h1>
           <p className="text-slate-400 text-[13px] mt-0.5 font-medium">
@@ -122,7 +137,7 @@ export default function TasksPage() {
           onClick={() => setShowModal(true)}
           className="btn btn-primary btn-md self-start sm:self-auto"
         >
-          <Plus size={16} /> 
+          <Plus size={16} />
           <span>เพิ่มงานใหม่</span>
         </button>
       </div>
@@ -194,7 +209,7 @@ export default function TasksPage() {
               onClick={clearFilters}
               className="btn btn-sm btn-danger flex items-center gap-1.5"
             >
-              <X size={13} /> 
+              <X size={13} />
               <span>ล้างตัวกรอง ({activeFilters})</span>
             </button>
           )}
@@ -295,7 +310,7 @@ function EmptyState({ onAdd, hasFilters }: { onAdd: () => void; hasFilters: bool
       </p>
       {!hasFilters && (
         <button id="btn-empty-add" onClick={onAdd} className="btn btn-primary btn-md mx-auto">
-          <Plus size={15} /> 
+          <Plus size={15} />
           <span>เพิ่มงานแรกของคุณ</span>
         </button>
       )}
