@@ -134,8 +134,7 @@ export function Sidebar() {
               <p className="text-[11px] font-bold text-white/80 uppercase tracking-wide">Quick Tip</p>
             </div>
             <p className="text-[11px] text-indigo-200/50 leading-relaxed">
-              กดปุ่ม <kbd className="bg-white/10 text-white px-1.5 py-0.5 rounded text-[9px] font-semibold border border-white/10">C</kbd> เพื่อสร้างงานใหม่ได้เลย!
-              <br/>ไปที่หน้างานทั้งหมด
+              กดปุ่ม <kbd className="bg-white/10 text-white px-1.5 py-0.5 rounded text-[9px] font-semibold border border-white/10">C</kbd> เพื่อสร้างงานใหม่ได้ทุกหน้าเลย!
             </p>
           </div>
         </div>

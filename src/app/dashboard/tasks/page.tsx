@@ -29,22 +29,6 @@ export default function TasksPage() {
     tagId: "",
   })
 
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      // ไม่ทำงานถ้ากำลังพิมพ์ใน input / textarea
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
-
-      if (e.key === "c" || e.key === "C" || e.key === "แ" || e.key === "ฉ") {
-        e.preventDefault()
-        setShowModal(true)
-        setSelectedTaskId(null)
-      }
-    }
-
-    window.addEventListener("keydown", handleKey)
-    return () => window.removeEventListener("keydown", handleKey)
-  }, [])
 
   useEffect(() => {
     const id = searchParams.get("id")
@@ -298,7 +282,7 @@ export default function TasksPage() {
 
 function EmptyState({ onAdd, hasFilters }: { onAdd: () => void; hasFilters: boolean }) {
   return (
-    <div className="glass-panel p-16 text-center animate-scale-up">
+    <div className="glass-panel p-16 text-center animate-scale-up min-h-[550px] flex flex-col items-center justify-center">
       <div className="w-16 h-16 bg-gradient-to-tr from-purple-500/20 to-indigo-500/20 border border-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg shadow-purple-500/5">
         <CheckCircle2 size={28} className="text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" />
       </div>

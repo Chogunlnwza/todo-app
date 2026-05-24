@@ -2,20 +2,39 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
-import { Folder, Plus, Trash2, Edit, Loader2, Check } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation"
+import {
+  Folder, Plus, Trash2, Edit, Loader2, Check,
+  ChevronDown, ChevronRight, CheckCircle2, Circle,
+  Clock, AlertCircle, XCircle, ArrowRight, Calendar, Flag
+} from "lucide-react"
+import { cn, STATUS_LABELS, PRIORITY_LABELS, formatDate } from "@/lib/utils"
 
 const PRESET_COLORS = [
   "#6366f1", "#8b5cf6", "#ec4899", "#ef4444", "#f97316",
   "#f59e0b", "#10b981", "#06b6d4", "#3b82f6", "#94a3b8"
 ]
 
+const STATUS_ICONS: Record<string, React.ReactNode> = {
+  TODO: <Circle size={13} className="text-purple-400" />,
+  IN_PROGRESS: <Clock size={13} className="text-blue-400" />,
+  IN_REVIEW: <AlertCircle size={13} className="text-amber-400" />,
+  DONE: <CheckCircle2 size={13} className="text-emerald-400" />,
+  CANCELLED: <XCircle size={13} className="text-red-400" />,
+}
+
+const PRIORITY_DOT: Record<string, string> = {
+  LOW: "#64748b", MEDIUM: "#3b82f6", HIGH: "#f97316", URGENT: "#ef4444",
+}
+
 export default function CategoriesPage() {
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState({ name: "", color: "#6366f1", icon: "folder" })
   const [error, setError] = useState("")
+  const [expandedCatId, setExpandedCatId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ["categories"],
@@ -23,6 +42,16 @@ export default function CategoriesPage() {
       const res = await fetch("/api/categories")
       return res.json()
     },
+  })
+
+  // Fetch tasks for expanded category
+  const { data: catTasksData, isLoading: catTasksLoading } = useQuery({
+    queryKey: ["tasks-by-category", expandedCatId],
+    queryFn: async () => {
+      const res = await fetch(`/api/tasks?categoryId=${expandedCatId}`)
+      return res.json()
+    },
+    enabled: !!expandedCatId,
   })
 
   const createMutation = useMutation({
@@ -62,6 +91,7 @@ export default function CategoriesPage() {
   })
 
   const categories = data?.categories || []
+  const catTasks = catTasksData?.tasks || []
 
   const startEdit = (cat: { id: string; name: string; color: string; icon: string }) => {
     setEditId(cat.id)
@@ -74,6 +104,10 @@ export default function CategoriesPage() {
     setEditId(null)
     setForm({ name: "", color: "#6366f1", icon: "folder" })
     setError("")
+  }
+
+  const toggleExpand = (catId: string) => {
+    setExpandedCatId(prev => prev === catId ? null : catId)
   }
 
   return (
@@ -92,7 +126,7 @@ export default function CategoriesPage() {
             onClick={() => setShowForm(true)}
             className="btn btn-primary btn-md"
           >
-            <Plus size={16} /> 
+            <Plus size={16} />
             <span>เพิ่มหมวดหมู่</span>
           </button>
         )}
@@ -190,51 +224,147 @@ export default function CategoriesPage() {
           {categories.map((cat: {
             id: string; name: string; color: string; icon: string;
             _count: { tasks: number }
-          }) => (
-            <div
-              key={cat.id}
-              className="glass-panel p-4.5 flex items-center gap-4 hover:border-white/15 transition-all duration-300 group"
-            >
-              {/* Icon frame with custom category tint background */}
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border"
-                style={{ backgroundColor: `${cat.color}15`, borderColor: `${cat.color}35` }}
-              >
-                <Folder size={20} style={{ color: cat.color }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-slate-100 group-hover:text-purple-400 transition-colors">{cat.name}</p>
-                <p className="text-xs text-slate-400 mt-1 font-semibold">{cat._count.tasks} รายการงาน</p>
-              </div>
-              <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  id={`btn-edit-cat-${cat.id}`}
-                  onClick={() => startEdit(cat)}
-                  className="p-2 text-slate-400 hover:text-purple-400 hover:bg-white/5 rounded-xl transition-all"
-                  title="แก้ไข"
+          }) => {
+            const isExpanded = expandedCatId === cat.id
+            return (
+              <div key={cat.id} className="rounded-2xl overflow-hidden border border-white/8 transition-all duration-300">
+                {/* Category Card Row */}
+                <div
+                  className={cn(
+                    "glass-panel rounded-none border-0 p-4.5 flex items-center gap-4 hover:border-white/15 transition-all duration-300 group cursor-pointer",
+                    isExpanded && "bg-white/4 border-b border-white/8"
+                  )}
+                  onClick={() => toggleExpand(cat.id)}
                 >
-                  <Edit size={14} />
-                </button>
-                <button
-                  id={`btn-delete-cat-${cat.id}`}
-                  onClick={() => {
-                    if (confirm(`คุณต้องการลบหมวดหมู่ "${cat.name}" หรือไม่?`)) {
-                      deleteMutation.mutate(cat.id)
+                  {/* Icon frame */}
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 border"
+                    style={{ backgroundColor: `${cat.color}15`, borderColor: `${cat.color}35` }}
+                  >
+                    <Folder size={20} style={{ color: cat.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-slate-100 group-hover:text-purple-400 transition-colors">{cat.name}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-semibold">{cat._count.tasks} รายการงาน</p>
+                  </div>
+
+                  {/* Expand Indicator */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-500 hidden sm:block">
+                      {isExpanded ? "ซ่อนรายการงาน" : "ดูรายการงาน"}
+                    </span>
+                    {isExpanded
+                      ? <ChevronDown size={16} className="text-purple-400 transition-transform" />
+                      : <ChevronRight size={16} className="text-slate-500 group-hover:text-purple-400 transition-colors" />
                     }
-                  }}
-                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
-                  title="ลบ"
-                >
-                  <Trash2 size={14} />
-                </button>
+                  </div>
+
+                  {/* Action buttons - stop propagation */}
+                  <div
+                    className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      id={`btn-edit-cat-${cat.id}`}
+                      onClick={() => startEdit(cat)}
+                      className="p-2 text-slate-400 hover:text-purple-400 hover:bg-white/5 rounded-xl transition-all"
+                      title="แก้ไข"
+                    >
+                      <Edit size={14} />
+                    </button>
+                    <button
+                      id={`btn-delete-cat-${cat.id}`}
+                      onClick={() => {
+                        if (confirm(`คุณต้องการลบหมวดหมู่ "${cat.name}" หรือไม่?`)) {
+                          deleteMutation.mutate(cat.id)
+                        }
+                      }}
+                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
+                      title="ลบ"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  {/* Color dot */}
+                  <div
+                    className="w-3.5 h-3.5 rounded-full flex-shrink-0 border border-white/10"
+                    style={{ backgroundColor: cat.color, boxShadow: `0 0 10px ${cat.color}80` }}
+                  />
+                </div>
+
+                {/* Expandable Task Panel */}
+                {isExpanded && (
+                  <div className="bg-[#08061a]/70 p-4 space-y-2 animate-fade-in">
+                    {catTasksLoading ? (
+                      <div className="flex items-center justify-center py-6 gap-2.5">
+                        <Loader2 size={16} className="animate-spin text-purple-400" />
+                        <span className="text-xs text-slate-400 font-medium">กำลังโหลดรายการงาน...</span>
+                      </div>
+                    ) : catTasks.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="w-10 h-10 bg-white/3 border border-dashed border-white/10 rounded-xl flex items-center justify-center mx-auto mb-2.5">
+                          <Folder size={18} className="text-slate-600" />
+                        </div>
+                        <p className="text-slate-500 text-[12px] font-semibold">ยังไม่มีงานในหมวดหมู่นี้</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                          {catTasks.map((task: {
+                            id: string; title: string; status: string;
+                            priority: string; dueDate: string | null;
+                          }) => (
+                            <button
+                              key={task.id}
+                              onClick={() => router.push(`/dashboard/tasks?id=${task.id}`)}
+                              className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/3 hover:bg-white/6 border border-white/5 hover:border-purple-500/20 transition-all duration-200 group/task text-left"
+                            >
+                              {/* Priority dot */}
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{
+                                  backgroundColor: PRIORITY_DOT[task.priority] || "#64748b",
+                                  boxShadow: `0 0 6px ${PRIORITY_DOT[task.priority] || "#64748b"}80`
+                                }}
+                              />
+                              {/* Status icon */}
+                              <div className="flex-shrink-0">{STATUS_ICONS[task.status]}</div>
+                              {/* Title */}
+                              <span className={cn(
+                                "flex-1 text-[12.5px] font-semibold text-slate-200 truncate group-hover/task:text-purple-400 transition-colors",
+                                task.status === "DONE" && "line-through text-slate-500"
+                              )}>
+                                {task.title}
+                              </span>
+                              {/* Due date */}
+                              {task.dueDate && (
+                                <span className="flex items-center gap-1 text-[10px] text-slate-500 font-medium flex-shrink-0">
+                                  <Calendar size={10} className="text-purple-400" />
+                                  {formatDate(task.dueDate)}
+                                </span>
+                              )}
+                              <ArrowRight size={11} className="text-slate-600 group-hover/task:text-purple-400 transition-colors flex-shrink-0" />
+                            </button>
+                          ))}
+                        </div>
+                        {/* View all link */}
+                        <div className="pt-1.5 border-t border-white/5">
+                          <button
+                            onClick={() => router.push(`/dashboard/tasks?categoryId=${cat.id}`)}
+                            className="flex items-center gap-1.5 text-[11px] font-bold text-purple-400 hover:text-purple-300 transition-colors mx-auto"
+                          >
+                            <span>ดูงานทั้งหมดในหมวด {cat.name}</span>
+                            <ArrowRight size={12} />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-              {/* Color capsule pill */}
-              <div
-                className="w-3.5 h-3.5 rounded-full flex-shrink-0 ml-1.5 border border-white/10"
-                style={{ backgroundColor: cat.color, boxShadow: `0 0 10px ${cat.color}80` }}
-              />
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

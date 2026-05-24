@@ -140,6 +140,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       )
     }
 
+    // ── Activity Log: บันทึก system comment เมื่อสถานะงานเปลี่ยน ──
+    if (data.status && data.status !== task.status) {
+      const statusEmoji: Record<string, string> = {
+        TODO: "📋", IN_PROGRESS: "⚡", IN_REVIEW: "🔍", DONE: "✅", CANCELLED: "❌"
+      }
+      const statusNameTH: Record<string, string> = {
+        TODO: "รอดำเนินการ", IN_PROGRESS: "กำลังดำเนินการ",
+        IN_REVIEW: "รอตรวจสอบ", DONE: "เสร็จสิ้นแล้ว", CANCELLED: "ยกเลิก"
+      }
+      const emoji = statusEmoji[data.status] || "🔄"
+      const newStatusName = statusNameTH[data.status] || data.status
+      const actorName = userName || "ผู้ใช้งาน"
+
+      await prisma.comment.create({
+        data: {
+          taskId: id,
+          userId: userId,
+          content: `__SYSTEM__:${emoji} ${actorName} เปลี่ยนสถานะงานเป็น "${newStatusName}"`,
+        },
+      }).catch(() => {/* ไม่ให้ error ตรงนี้กระทบ response หลัก */})
+    }
+
     return NextResponse.json({ task: updatedTask })
   } catch (error) {
     if (error instanceof z.ZodError) {

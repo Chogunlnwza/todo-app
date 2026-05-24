@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react"
 import {
   X, Plus, Trash2, Loader2, Calendar, Flag, User2,
   Tag, Folder, CheckSquare, Square, Save, AlertCircle,
-  MessageSquare, User, ListTodo, Layers
+  MessageSquare, User, ListTodo, Layers, Send, Mail, Activity, CheckCircle2
 } from "lucide-react"
 import { cn, STATUS_LABELS, PRIORITY_LABELS, formatRelative } from "@/lib/utils"
 import { TaskStatus, Priority } from "@prisma/client"
@@ -50,6 +50,12 @@ export function TaskModal({ taskId, categories, tags, onClose }: TaskModalProps)
 
   // Comments state
   const [newComment, setNewComment] = useState("")
+
+  // Notify by email state
+  const [showNotifyEmail, setShowNotifyEmail] = useState(false)
+  const [notifyEmail, setNotifyEmail] = useState("")
+  const [notifyName, setNotifyName] = useState("")
+  const [notifySuccess, setNotifySuccess] = useState(false)
 
   // Quick-creation Category & Tag states
   const [showQuickCategory, setShowQuickCategory] = useState(false)
@@ -167,6 +173,29 @@ export function TaskModal({ taskId, categories, tags, onClose }: TaskModalProps)
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["task", taskId] })
       queryClient.invalidateQueries({ queryKey: ["tasks"] })
+    },
+    onError: (err: Error) => setError(err.message),
+  })
+
+  /* ─── Mutation for Notify by Email ─── */
+  const notifyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/tasks/${taskId}/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: notifyEmail.trim(), name: notifyName.trim() }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || "ส่งอีเมลไม่สำเร็จ")
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      setNotifySuccess(true)
+      setNotifyEmail("")
+      setNotifyName("")
+      setTimeout(() => setNotifySuccess(false), 3000)
     },
     onError: (err: Error) => setError(err.message),
   })
@@ -332,522 +361,592 @@ export function TaskModal({ taskId, categories, tags, onClose }: TaskModalProps)
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-[#030013]/75 z-45 backdrop-blur-[10px] 
+      {/* Backdrop — starts below the 65px header so it never covers the top bar */}
+      <div className="fixed left-0 right-0 bottom-0 top-[65px] bg-[#030013]/75 z-[999] backdrop-blur-[10px] 
       transition-opacity duration-300 animate-fade-in" onClick={onClose} />
 
-      {/* Centered Desktop Modal */}
-      <div className="fixed inset-x-4 bottom-4 top-16 sm:inset-auto
-      sm:top-auto sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full max-w-[480px] md:max-w-[850px] h-[calc(100vh-100px)] 
-      sm:h-auto sm:max-h-[calc(100vh-120px)] glass-modal z-50 shadow-[0_25px_60px_rgba(0,0,0,0.6)] 
+      {/* Centered Modal Wrapper — constrained to the area below the header */}
+      <div className="fixed left-0 right-0 bottom-0 top-[65px] z-[1000] flex items-center justify-center p-3 sm:p-5 pointer-events-none">
+        <div data-modal-open="true" className="pointer-events-auto w-full max-w-[480px] md:max-w-[850px]
+      max-h-[calc(100vh-65px-16px)] sm:max-h-[calc(100vh-65px-32px)] glass-modal shadow-[0_25px_60px_rgba(0,0,0,0.6)]
       flex flex-col animate-scale-up rounded-2xl md:rounded-3xl overflow-hidden border border-white/10">
 
-      {/*"fixed inset-x-4 bottom-4 top-16 sm:inset-x-auto sm:top-[65px] sm:bottom-4 sm:left-1/2 sm:-translate-x-1/2 
-      sm:translate-y-0 w-full max-w-[480px] md:max-w-[850px] h-[calc(100vh-100px)] sm:h-auto sm:max-h-[calc(100vh-80px)]*/}
-
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 
         flex-shrink-0 bg-[#120e32]/40 backdrop-blur-md">
-          <div className="flex items-center gap-2.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)] animate-pulse" />
-            <div>
-              <h2 className="text-[15px] font-black text-white leading-none">
-                {isEdit ? "รายละเอียดและแก้ไขงาน" : "สร้างงานใหม่เข้าระบบ"}
-              </h2>
-              {isEdit && taskData?.task && (
-                <p className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-wide">
-                  Task ID: {taskId?.slice(0, 8)}...
-                </p>
-              )}
+            <div className="flex items-center gap-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.8)] animate-pulse" />
+              <div>
+                <h2 className="text-[15px] font-black text-white leading-none">
+                  {isEdit ? "รายละเอียดและแก้ไขงาน" : "สร้างงานใหม่เข้าระบบ"}
+                </h2>
+                {isEdit && taskData?.task && (
+                  <p className="text-[10px] text-slate-200 font-bold mt-1 uppercase tracking-wide">
+                    Task ID: {taskId?.slice(0, 8)}...
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-          <button
-            id="btn-close-modal"
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all 
+            <button
+              id="btn-close-modal"
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition-all 
             cursor-pointer border border-transparent hover:border-white/5"
-          >
-            <X size={16} />
-          </button>
-        </div>
+            >
+              <X size={16} />
+            </button>
+          </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#09071a]/95">
-          {taskLoading && (
-            <div className="flex flex-col items-center justify-center py-24 gap-4">
-              <Loader2 size={36} className="animate-spin text-purple-400" />
-              <p className="text-slate-400 text-xs font-semibold tracking-wider">กำลังโหลดข้อมูลงานย่อย...</p>
-            </div>
-          )}
+          {/* Modal Body */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#09071a]/95">
+            {taskLoading && (
+              <div className="flex flex-col items-center justify-center py-24 gap-4">
+                <Loader2 size={36} className="animate-spin text-purple-400" />
+                <p className="text-slate-400 text-xs font-semibold tracking-wider">กำลังโหลดข้อมูลงานย่อย...</p>
+              </div>
+            )}
 
-          {!taskLoading && (
-            <div className="space-y-6">
-              {error && (
-                <div className="flex items-center gap-2.5 p-3.5 bg-red-500/10 border border-red-500/20 
+            {!taskLoading && (
+              <div className="space-y-6">
+                {error && (
+                  <div className="flex items-center gap-2.5 p-3.5 bg-red-500/10 border border-red-500/20 
                 rounded-2xl text-red-300 text-xs font-semibold animate-shake">
-                  <AlertCircle size={15} /> <span>{error}</span>
-                </div>
-              )}
-
-              {/* Two Column Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-
-                {/* Left Column - Core Input details */}
-                <div className="md:col-span-3 space-y-5">
-                  {/* Title */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                      ชื่องานที่ต้องการบันทึก <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      id="task-title"
-                      ref={titleRef}
-                      type="text"
-                      value={form.title}
-                      onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                      placeholder="เช่น ออกแบบ UI ระบบหน้าหลัก, แก้บั๊ก API..."
-                      className="input w-full font-black text-sm py-3 border-white/10"
-                    />
+                    <AlertCircle size={15} /> <span>{error}</span>
                   </div>
+                )}
 
-                  {/* Description */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 
-                    uppercase tracking-widest mb-1.5">รายละเอียดเพิ่มเติม</label>
-                    <textarea
-                      id="task-description"
-                      value={form.description}
-                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                      placeholder="ระบุคำอธิบายงาน หรือรายละเอียดความคืบหน้าที่สำคัญ..."
-                      rows={4}
-                      className="input w-full resize-none text-[12.5px] leading-relaxed py-2.5 border-white/10"
-                    />
-                  </div>
+                {/* Two Column Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
 
-                  {/* Subtasks */}
-                  <div className="space-y-3.5 border-t border-white/5 pt-4">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      <span className="flex items-center gap-2">
-                        <ListTodo size={13} className="text-purple-400" />
-                        <span>งานย่อย (Subtasks Checklist)</span>
-                      </span>
-                    </label>
-
-                    {subtasks.length > 0 && (
-                      <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-                        {subtasks.map((s, i) => (
-                          <div key={i} className="flex items-center gap-3 p-3 bg-white/3 hover:bg-white/6 border border-white/5 
-                          hover:border-white/10 rounded-2xl group transition-all duration-200">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleSubtask(s, i)}
-                              className="text-slate-400 hover:text-emerald-400 transition-colors flex-shrink-0 cursor-pointer"
-                            >
-                              {s.isDone ? (
-                                <CheckSquare size={17} className="text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
-                              ) : (
-                                <Square size={17} />
-                              )}
-                            </button>
-                            <span className={cn("text-xs font-semibold text-slate-200 flex-1 truncate", 
-                              s.isDone && "line-through text-slate-500")}>
-                              {s.title}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteSubtask(s, i)}
-                              className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 
-                              rounded-lg p-1 hover:bg-red-500/10 transition-all cursor-pointer"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Add Subtask Input */}
-                    <div className="flex gap-2">
+                  {/* Left Column - Core Input details */}
+                  <div className="md:col-span-3 space-y-5">
+                    {/* Title */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                        ชื่องานที่ต้องการบันทึก <span className="text-red-400">*</span>
+                      </label>
                       <input
-                        id="new-subtask-input"
+                        id="task-title"
+                        ref={titleRef}
                         type="text"
-                        value={newSubtask}
-                        onChange={(e) => setNewSubtask(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubtask() } }}
-                        placeholder="ป้อนหัวข้องานย่อย..."
-                        className="flex-1 input input-sm"
+                        value={form.title}
+                        onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                        placeholder="เช่น ออกแบบ UI ระบบหน้าหลัก, แก้บั๊ก API..."
+                        className="input w-full font-black text-sm py-3 border-white/10"
                       />
-                      <button
-                        type="button"
-                        id="btn-add-subtask"
-                        onClick={handleAddSubtask}
-                        className="btn btn-secondary px-3.5 cursor-pointer rounded-xl"
-                      >
-                        <Plus size={15} />
-                      </button>
                     </div>
-                  </div>
 
-                  {/* Comments Log (Only in Edit Mode) */}
-                  {isEdit && (
-                    <div className="space-y-4 border-t border-white/5 pt-4">
+                    {/* Description */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 
+                    uppercase tracking-widest mb-1.5">รายละเอียดเพิ่มเติม</label>
+                      <textarea
+                        id="task-description"
+                        value={form.description}
+                        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                        placeholder="ระบุคำอธิบายงาน หรือรายละเอียดความคืบหน้าที่สำคัญ..."
+                        rows={4}
+                        className="input w-full resize-none text-[12.5px] leading-relaxed py-2.5 border-white/10"
+                      />
+                    </div>
+
+                    {/* Subtasks */}
+                    <div className="space-y-3.5 border-t border-white/5 pt-4">
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         <span className="flex items-center gap-2">
-                          <MessageSquare size={13} className="text-purple-400" />
-                          <span>การพูดคุยและอัปเดต ({comments.length})</span>
+                          <ListTodo size={13} className="text-purple-400" />
+                          <span>งานย่อย (Subtasks Checklist)</span>
                         </span>
                       </label>
 
-                      {/* Add Comment input */}
-                      <form onSubmit={handleAddComment} className="flex gap-2">
-                        <input
-                          id="comment-input"
-                          type="text"
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          placeholder="พิมพ์ข้อความความคิดเห็น..."
-                          className="flex-1 input input-sm"
-                        />
-                        <button
-                          type="submit"
-                          id="btn-send-comment"
-                          disabled={addCommentMutation.isPending || !newComment.trim()}
-                          className="btn btn-primary btn-sm px-4 font-bold cursor-pointer rounded-xl"
-                        >
-                          {addCommentMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : "ส่ง"}
-                        </button>
-                      </form>
-
-                      {/* Comments List */}
-                      {comments.length > 0 ? (
-                        <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                          {comments.map((c: {
-                            id: string; content: string; createdAt: string; userId: string;
-                            user: { id: string; name: string; image: string | null }
-                          }) => (
-                            <div key={c.id} className="p-3 bg-white/2 border border-white/5 rounded-2xl 
-                            space-y-1.5 group transition-all">
-                              <div className="flex items-center justify-between gap-2.5">
-                                <div className="flex items-center gap-2">
-                                  {/* Avatar */}
-                                  <div className="w-5.5 h-5.5 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 
-                                  to-indigo-600 flex items-center justify-center text-[9px] font-black text-white border 
-                                  border-white/10 flex-shrink-0">
-                                    {c.user?.image ? (
-                                      <img src={c.user.image} alt={c.user.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                      c.user?.name?.[0]?.toUpperCase() || "U"
-                                    )}
-                                  </div>
-                                  <span className="text-[11.5px] font-bold text-slate-200">{c.user?.name}</span>
-                                  <span className="text-[9.5px] text-slate-500 font-medium">{formatRelative(c.createdAt)}</span>
-                                </div>
-                                {/* Delete comment button */}
-                                {(c.userId === currentUserId || taskData?.task?.userId === currentUserId) && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (confirm("ต้องการลบคอมเมนต์นี้หรือไม่?")) {
-                                        deleteCommentMutation.mutate(c.id)
-                                      }
-                                    }}
-                                    className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-0.5 
-                                    rounded transition-all cursor-pointer"
-                                  >
-                                    <Trash2 size={11} />
-                                  </button>
+                      {subtasks.length > 0 && (
+                        <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                          {subtasks.map((s, i) => (
+                            <div key={i} className="flex items-center gap-3 p-3 bg-white/3 hover:bg-white/6 border border-white/5 
+                          hover:border-white/10 rounded-2xl group transition-all duration-200">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleSubtask(s, i)}
+                                className="text-slate-400 hover:text-emerald-400 transition-colors flex-shrink-0 cursor-pointer"
+                              >
+                                {s.isDone ? (
+                                  <CheckSquare size={17} className="text-emerald-400 drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
+                                ) : (
+                                  <Square size={17} />
                                 )}
-                              </div>
-                              <p className="text-xs text-slate-300 pl-7 leading-relaxed font-semibold">
-                                {c.content}
-                              </p>
+                              </button>
+                              <span className={cn("text-xs font-semibold text-slate-200 flex-1 truncate",
+                                s.isDone && "line-through text-slate-500")}>
+                                {s.title}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteSubtask(s, i)}
+                                className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 
+                              rounded-lg p-1 hover:bg-red-500/10 transition-all cursor-pointer"
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <div className="text-center py-5 text-slate-500 text-[11px] font-semibold border border-dashed 
-                        border-white/5 rounded-2xl select-none">
-                          ยังไม่มีความคิดเห็นในงานนี้
-                        </div>
                       )}
-                    </div>
-                  )}
-                </div>
 
-                {/* Right Column - Sidebar Meta settings */}
-                <div className="md:col-span-2 space-y-4 bg-[#0d0a21]/60 border border-white/5 rounded-2xl p-4.5">
-
-                  {/* Status */}
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">สถานะงาน</label>
-                    <select
-                      id="task-status"
-                      value={form.status}
-                      onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as TaskStatus }))}
-                      className="input font-semibold text-xs border-white/10"
-                    >
-                      {STATUSES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Priority */}
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">ระดับความสำคัญ</label>
-                    <select
-                      id="task-priority"
-                      value={form.priority}
-                      onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as Priority }))}
-                      className="input font-semibold text-xs border-white/10"
-                    >
-                      {PRIORITIES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Due Date */}
-                  <div>
-                    <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">กำหนดส่งงาน</label>
-                    <div className="relative group">
-                      <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 
-                      group-focus-within:text-purple-400 pointer-events-none" />
-                      <input
-                        id="task-due-date"
-                        type="date"
-                        value={form.dueDate}
-                        onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
-                        className="input pl-9 text-xs border-white/10"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Category */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between items-center select-none">
-                      <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest">หมวดหมู่</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowQuickCategory(!showQuickCategory)}
-                        className="text-[9.5px] font-bold text-purple-400 hover:text-purple-300 flex items-center 
-                        gap-0.5 cursor-pointer"
-                      >
-                        {showQuickCategory ? "ยกเลิก" : "+ สร้างด่วน"}
-                      </button>
-                    </div>
-
-                    {showQuickCategory ? (
-                      <div className="p-3 bg-white/2 border border-white/5 rounded-2xl space-y-3.5 animate-scale-up">
+                      {/* Add Subtask Input */}
+                      <div className="flex gap-2">
                         <input
+                          id="new-subtask-input"
                           type="text"
-                          value={quickCategoryName}
-                          onChange={(e) => setQuickCategoryName(e.target.value)}
-                          placeholder="ชื่อหมวดหมู่..."
-                          className="input input-sm border-white/10"
+                          value={newSubtask}
+                          onChange={(e) => setNewSubtask(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddSubtask() } }}
+                          placeholder="ป้อนหัวข้องานย่อย..."
+                          className="flex-1 input input-sm"
                         />
-                        <div className="flex gap-1.5 flex-wrap">
-                          {PRESET_COLORS.slice(0, 5).map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => setQuickCategoryColor(color)}
-                              className="w-5.5 h-5.5 rounded-full border flex items-center justify-center 
-                              transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-                              style={{ backgroundColor: color, borderColor: quickCategoryColor === color ? 
-                                "#ffffff" : "transparent" }}
-                            >
-                              {quickCategoryColor === color && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
-                            </button>
-                          ))}
-                        </div>
                         <button
                           type="button"
-                          disabled={createCategoryMutation.isPending || !quickCategoryName.trim()}
-                          onClick={() => createCategoryMutation.mutate()}
-                          className="w-full btn btn-primary btn-sm font-bold cursor-pointer rounded-xl"
+                          id="btn-add-subtask"
+                          onClick={handleAddSubtask}
+                          className="btn btn-secondary px-3.5 cursor-pointer rounded-xl"
                         >
-                          บันทึกหมวดหมู่
+                          <Plus size={15} />
                         </button>
                       </div>
-                    ) : (
-                      <select
-                        id="task-category"
-                        value={form.categoryId}
-                        onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-                        className="input text-xs border-white/10"
-                      >
-                        <option value="">ไม่มีหมวดหมู่</option>
-                        {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                    )}
-                  </div>
-
-                  {/* Tags */}
-                  <div className="space-y-1.5 border-t border-white/5 pt-3">
-                    <div className="flex justify-between items-center select-none">
-                      <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest">แท็กป้ายกำกับ</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowQuickTag(!showQuickTag)}
-                        className="text-[9.5px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-0.5 
-                        cursor-pointer"
-                      >
-                        {showQuickTag ? "ยกเลิก" : "+ สร้างด่วน"}
-                      </button>
                     </div>
 
-                    {showQuickTag ? (
-                      <div className="p-3 bg-white/2 border border-white/5 rounded-2xl space-y-3.5 animate-scale-up">
-                        <input
-                          type="text"
-                          value={quickTagName}
-                          onChange={(e) => setQuickTagName(e.target.value)}
-                          placeholder="ชื่อแท็ก..."
-                          className="input input-sm border-white/10"
-                        />
-                        <div className="flex gap-1.5 flex-wrap">
-                          {PRESET_COLORS.slice(5, 10).map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => setQuickTagColor(color)}
-                              className="w-5.5 h-5.5 rounded-full border flex items-center justify-center 
-                              transition-transform hover:scale-110 active:scale-95 cursor-pointer"
-                              style={{ backgroundColor: color, borderColor: quickTagColor === color ? 
-                                "#ffffff" : "transparent" }}
-                            >
-                              {quickTagColor === color && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          type="button"
-                          disabled={createTagMutation.isPending || !quickTagName.trim()}
-                          onClick={() => createTagMutation.mutate()}
-                          className="w-full btn btn-primary btn-sm font-bold cursor-pointer rounded-xl"
-                        >
-                          บันทึกแท็ก
-                        </button>
-                      </div>
-                    ) : (
-                      tags.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1 py-1">
-                          {tags.map((tag) => (
-                            <button
-                              key={tag.id}
-                              type="button"
-                              id={`tag-${tag.id}`}
-                              onClick={() => toggleTag(tag.id)}
-                              className={cn(
-                                "px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all duration-200 cursor-pointer",
-                                form.tagIds.includes(tag.id) ? "opacity-100 shadow-md" : "opacity-45 hover:opacity-75"
-                              )}
-                              style={form.tagIds.includes(tag.id)
-                                ? { backgroundColor: `${tag.color}15`, borderColor: tag.color, color: tag.color }
-                                : { borderColor: "rgba(255,255,255,0.08)", color: "#94a3b8" }
-                              }
-                            >
-                              #{tag.name}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-500 font-semibold italic">ยังไม่มีรายการแท็กในระบบ</p>
-                      )
-                    )}
-                  </div>
-
-                  {/* Assignees */}
-                  <div className="space-y-1.5 border-t border-white/5 pt-3">
-                    <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest">ผู้รับผิดชอบร่วม</label>
-
-                    {assignees.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {assignees.map((user) => (
-                          <span
-                            key={user.id}
-                            className="flex items-center gap-1.5 bg-purple-500/10 text-purple-300 text-[10.5px] 
-                            font-bold px-2 py-0.5 rounded-full border border-purple-500/20"
-                          >
-                            <span className="w-4.5 h-4.5 bg-purple-500/20 rounded-full flex items-center justify-center 
-                            text-[8px] font-black text-white">
-                              {user.name?.[0]?.toUpperCase()}
-                            </span>
-                            <span className="max-w-[70px] truncate">{user.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeAssignee(user.id)}
-                              className="text-purple-400 hover:text-red-400 transition-colors cursor-pointer"
-                            >
-                              <X size={10} />
-                            </button>
+                    {/* Comments Log (Only in Edit Mode) */}
+                    {isEdit && (
+                      <div className="space-y-4 border-t border-white/5 pt-4">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <span className="flex items-center gap-2">
+                            <Activity size={13} className="text-purple-400" />
+                            <span>ประวัติและการอัปเดต ({comments.length})</span>
                           </span>
-                        ))}
+                        </label>
+
+                        {/* Add Comment input */}
+                        <form onSubmit={handleAddComment} className="flex gap-2">
+                          <input
+                            id="comment-input"
+                            type="text"
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            placeholder="พิมพ์ข้อความความคิดเห็น..."
+                            className="flex-1 input input-sm"
+                          />
+                          <button
+                            type="submit"
+                            id="btn-send-comment"
+                            disabled={addCommentMutation.isPending || !newComment.trim()}
+                            className="btn btn-primary btn-sm px-4 font-bold cursor-pointer rounded-xl"
+                          >
+                            {addCommentMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : "ส่ง"}
+                          </button>
+                        </form>
+
+                        {/* Comments List — แยก system (activity) กับ user comments */}
+                        {comments.length > 0 ? (
+                          <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                            {comments.map((c: {
+                              id: string; content: string; createdAt: string; userId: string;
+                              user: { id: string; name: string; image: string | null }
+                            }) => {
+                              const isSystem = c.content.startsWith("__SYSTEM__:")
+                              const displayContent = isSystem ? c.content.replace("__SYSTEM__:", "") : c.content
+                              if (isSystem) {
+                                return (
+                                  <div key={c.id} className="flex items-center gap-2.5 py-1.5 px-3 rounded-xl bg-white/2 border border-dashed border-white/8">
+                                    <Activity size={11} className="text-purple-400 flex-shrink-0" />
+                                    <span className="text-[11px] text-slate-400 font-medium flex-1">{displayContent}</span>
+                                    <span className="text-[9px] text-slate-600">{formatRelative(c.createdAt)}</span>
+                                  </div>
+                                )
+                              }
+                              return (
+                                <div key={c.id} className="p-3 bg-white/2 border border-white/5 rounded-2xl 
+                              space-y-1.5 group transition-all">
+                                  <div className="flex items-center justify-between gap-2.5">
+                                    <div className="flex items-center gap-2">
+                                      {/* Avatar */}
+                                      <div className="w-5.5 h-5.5 rounded-full overflow-hidden bg-gradient-to-tr from-purple-500 
+                                    to-indigo-600 flex items-center justify-center text-[9px] font-black text-white border 
+                                    border-white/10 flex-shrink-0">
+                                        {c.user?.image ? (
+                                          <img src={c.user.image} alt={c.user.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                          c.user?.name?.[0]?.toUpperCase() || "U"
+                                        )}
+                                      </div>
+                                      <span className="text-[11.5px] font-bold text-slate-200">{c.user?.name}</span>
+                                      <span className="text-[9.5px] text-slate-500 font-medium">{formatRelative(c.createdAt)}</span>
+                                    </div>
+                                    {/* Delete comment button */}
+                                    {(c.userId === currentUserId || taskData?.task?.userId === currentUserId) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (confirm("ต้องการลบคอมเมนต์นี้หรือไม่?")) {
+                                            deleteCommentMutation.mutate(c.id)
+                                          }
+                                        }}
+                                        className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 p-0.5 
+                                      rounded transition-all cursor-pointer"
+                                      >
+                                        <Trash2 size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-300 pl-7 leading-relaxed font-semibold">
+                                    {c.content}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-5 text-slate-500 text-[11px] font-semibold border border-dashed 
+                        border-white/5 rounded-2xl select-none">
+                            ยังไม่มีความคิดเห็นในงานนี้
+                          </div>
+                        )}
+
+                        {/* ─── Notify by Email ─── */}
+                        <div className="border-t border-white/5 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => setShowNotifyEmail(v => !v)}
+                            className="flex items-center gap-2 text-[10px] font-bold text-slate-400 hover:text-purple-300 transition-colors cursor-pointer"
+                          >
+                            <Mail size={11} className="text-purple-400" />
+                            <span>{showNotifyEmail ? "ซ่อน" : "ส่งแจ้งงานทางอีเมล"}</span>
+                            <span className="text-[9px] text-slate-600 font-medium">(ไม่ต้องสมัครสมาชิก)</span>
+                          </button>
+                          {showNotifyEmail && (
+                            <div className="mt-2.5 p-3.5 bg-white/2 border border-purple-500/15 rounded-2xl space-y-2.5 animate-scale-up">
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  id="notify-name-input"
+                                  type="text"
+                                  value={notifyName}
+                                  onChange={(e) => setNotifyName(e.target.value)}
+                                  placeholder="ชื่อผู้รับ (ถ้ามี)"
+                                  className="input input-sm border-white/10 text-xs"
+                                />
+                                <input
+                                  id="notify-email-input"
+                                  type="email"
+                                  value={notifyEmail}
+                                  onChange={(e) => setNotifyEmail(e.target.value)}
+                                  placeholder="อีเมลผู้รับ *"
+                                  className="input input-sm border-white/10 text-xs"
+                                />
+                              </div>
+                              {notifySuccess ? (
+                                <div className="flex items-center gap-2 text-emerald-400 text-[11px] font-bold py-1">
+                                  <CheckCircle2 size={13} />
+                                  <span>ส่งอีเมลแจ้งงานเรียบร้อยแล้ว!</span>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  id="btn-send-notify"
+                                  onClick={() => notifyMutation.mutate()}
+                                  disabled={notifyMutation.isPending || !notifyEmail.trim()}
+                                  className="w-full btn btn-primary btn-sm font-bold cursor-pointer rounded-xl flex items-center gap-1.5"
+                                >
+                                  {notifyMutation.isPending
+                                    ? <><Loader2 size={12} className="animate-spin" /><span>กำลังส่ง...</span></>
+                                    : <><Send size={12} /><span>ส่งอีเมลแจ้งงาน</span></>
+                                  }
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
+                  </div>
 
-                    <div className="relative group">
-                      <User2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 
+
+                  {/* Right Column - Sidebar Meta settings */}
+                  <div className="md:col-span-2 space-y-4 bg-[#0d0a21]/60 border border-white/5 rounded-2xl p-4.5">
+
+                    {/* Status */}
+                    <div>
+                      <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">สถานะงาน</label>
+                      <select
+                        id="task-status"
+                        value={form.status}
+                        onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as TaskStatus }))}
+                        className="input font-semibold text-xs border-white/10"
+                      >
+                        {STATUSES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Priority */}
+                    <div>
+                      <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">ระดับความสำคัญ</label>
+                      <select
+                        id="task-priority"
+                        value={form.priority}
+                        onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as Priority }))}
+                        className="input font-semibold text-xs border-white/10"
+                      >
+                        {PRIORITIES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Due Date */}
+                    <div>
+                      <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">กำหนดส่งงาน</label>
+                      <div className="relative group">
+                        <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 
                       group-focus-within:text-purple-400 pointer-events-none" />
-                      <input
-                        id="assignee-search"
-                        type="text"
-                        value={userSearch}
-                        onChange={(e) => setUserSearch(e.target.value)}
-                        placeholder="พิมพ์เพื่อค้นหาชื่อ/อีเมล..."
-                        className="w-full input input-sm pl-9 text-xs border-white/10"
-                      />
-                      {searchResults?.users?.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#0f0c29]/95 border border-white/15 
-                        rounded-2xl shadow-2xl py-1 z-35 max-h-36 overflow-y-auto backdrop-blur-xl">
-                          {searchResults.users.map((u: { id: string; name: string; email: string }) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              onClick={() => addAssignee(u)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors 
-                              text-left cursor-pointer"
+                        <input
+                          id="task-due-date"
+                          type="date"
+                          value={form.dueDate}
+                          onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+                          className="input pl-9 text-xs border-white/10"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Category */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center select-none">
+                        <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest">หมวดหมู่</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickCategory(!showQuickCategory)}
+                          className="text-[9.5px] font-bold text-purple-400 hover:text-purple-300 flex items-center 
+                        gap-0.5 cursor-pointer"
+                        >
+                          {showQuickCategory ? "ยกเลิก" : "+ สร้างด่วน"}
+                        </button>
+                      </div>
+
+                      {showQuickCategory ? (
+                        <div className="p-3 bg-white/2 border border-white/5 rounded-2xl space-y-3.5 animate-scale-up">
+                          <input
+                            type="text"
+                            value={quickCategoryName}
+                            onChange={(e) => setQuickCategoryName(e.target.value)}
+                            placeholder="ชื่อหมวดหมู่..."
+                            className="input input-sm border-white/10"
+                          />
+                          <div className="flex gap-1.5 flex-wrap">
+                            {PRESET_COLORS.slice(0, 5).map((color) => (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => setQuickCategoryColor(color)}
+                                className="w-5.5 h-5.5 rounded-full border flex items-center justify-center 
+                              transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+                                style={{
+                                  backgroundColor: color, borderColor: quickCategoryColor === color ?
+                                    "#ffffff" : "transparent"
+                                }}
+                              >
+                                {quickCategoryColor === color && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={createCategoryMutation.isPending || !quickCategoryName.trim()}
+                            onClick={() => createCategoryMutation.mutate()}
+                            className="w-full btn btn-primary btn-sm font-bold cursor-pointer rounded-xl"
+                          >
+                            บันทึกหมวดหมู่
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          id="task-category"
+                          value={form.categoryId}
+                          onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
+                          className="input text-xs border-white/10"
+                        >
+                          <option value="">ไม่มีหมวดหมู่</option>
+                          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Tags */}
+                    <div className="space-y-1.5 border-t border-white/5 pt-3">
+                      <div className="flex justify-between items-center select-none">
+                        <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest">แท็กป้ายกำกับ</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowQuickTag(!showQuickTag)}
+                          className="text-[9.5px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-0.5 
+                        cursor-pointer"
+                        >
+                          {showQuickTag ? "ยกเลิก" : "+ สร้างด่วน"}
+                        </button>
+                      </div>
+
+                      {showQuickTag ? (
+                        <div className="p-3 bg-white/2 border border-white/5 rounded-2xl space-y-3.5 animate-scale-up">
+                          <input
+                            type="text"
+                            value={quickTagName}
+                            onChange={(e) => setQuickTagName(e.target.value)}
+                            placeholder="ชื่อแท็ก..."
+                            className="input input-sm border-white/10"
+                          />
+                          <div className="flex gap-1.5 flex-wrap">
+                            {PRESET_COLORS.slice(5, 10).map((color) => (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => setQuickTagColor(color)}
+                                className="w-5.5 h-5.5 rounded-full border flex items-center justify-center 
+                              transition-transform hover:scale-110 active:scale-95 cursor-pointer"
+                                style={{
+                                  backgroundColor: color, borderColor: quickTagColor === color ?
+                                    "#ffffff" : "transparent"
+                                }}
+                              >
+                                {quickTagColor === color && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={createTagMutation.isPending || !quickTagName.trim()}
+                            onClick={() => createTagMutation.mutate()}
+                            className="w-full btn btn-primary btn-sm font-bold cursor-pointer rounded-xl"
+                          >
+                            บันทึกแท็ก
+                          </button>
+                        </div>
+                      ) : (
+                        tags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1 py-1">
+                            {tags.map((tag) => (
+                              <button
+                                key={tag.id}
+                                type="button"
+                                id={`tag-${tag.id}`}
+                                onClick={() => toggleTag(tag.id)}
+                                className={cn(
+                                  "px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all duration-200 cursor-pointer",
+                                  form.tagIds.includes(tag.id) ? "opacity-100 shadow-md" : "opacity-45 hover:opacity-75"
+                                )}
+                                style={form.tagIds.includes(tag.id)
+                                  ? { backgroundColor: `${tag.color}15`, borderColor: tag.color, color: tag.color }
+                                  : { borderColor: "rgba(255,255,255,0.08)", color: "#94a3b8" }
+                                }
+                              >
+                                #{tag.name}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-500 font-semibold italic">ยังไม่มีรายการแท็กในระบบ</p>
+                        )
+                      )}
+                    </div>
+
+                    {/* Assignees */}
+                    <div className="space-y-1.5 border-t border-white/5 pt-3">
+                      <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-widest">ผู้รับผิดชอบร่วม</label>
+
+                      {assignees.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {assignees.map((user) => (
+                            <span
+                              key={user.id}
+                              className="flex items-center gap-1.5 bg-purple-500/10 text-purple-300 text-[10.5px] 
+                            font-bold px-2 py-0.5 rounded-full border border-purple-500/20"
                             >
-                              <div className="w-6.5 h-6.5 bg-purple-500/20 rounded-full flex items-center justify-center 
-                              text-[9px] font-black text-purple-300 flex-shrink-0">
-                                {u.name?.[0]?.toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[12px] font-bold text-slate-200 truncate">{u.name}</p>
-                                <p className="text-[9.5px] text-slate-500 truncate">{u.email}</p>
-                              </div>
-                            </button>
+                              <span className="w-4.5 h-4.5 bg-purple-500/20 rounded-full flex items-center justify-center 
+                            text-[8px] font-black text-white">
+                                {user.name?.[0]?.toUpperCase()}
+                              </span>
+                              <span className="max-w-[70px] truncate">{user.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeAssignee(user.id)}
+                                className="text-purple-400 hover:text-red-400 transition-colors cursor-pointer"
+                              >
+                                <X size={10} />
+                              </button>
+                            </span>
                           ))}
                         </div>
                       )}
+
+                      <div className="relative group">
+                        <User2 size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 
+                      group-focus-within:text-purple-400 pointer-events-none" />
+                        <input
+                          id="assignee-search"
+                          type="text"
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                          placeholder="พิมพ์เพื่อค้นหาชื่อ/อีเมล..."
+                          className="w-full input input-sm pl-9 text-xs border-white/10"
+                        />
+                        {searchResults?.users?.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#0f0c29]/95 border border-white/15 
+                        rounded-2xl shadow-2xl py-1 z-35 max-h-36 overflow-y-auto backdrop-blur-xl">
+                            {searchResults.users.map((u: { id: string; name: string; email: string }) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => addAssignee(u)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors 
+                              text-left cursor-pointer"
+                              >
+                                <div className="w-6.5 h-6.5 bg-purple-500/20 rounded-full flex items-center justify-center 
+                              text-[9px] font-black text-purple-300 flex-shrink-0">
+                                  {u.name?.[0]?.toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[12px] font-bold text-slate-200 truncate">{u.name}</p>
+                                  <p className="text-[9.5px] text-slate-500 truncate">{u.email}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-white/5 flex gap-3 flex-shrink-0 bg-[#120e32]/40 backdrop-blur-md">
-          <button
-            type="button"
-            id="btn-cancel-modal"
-            onClick={onClose}
-            className="flex-1 btn btn-secondary py-2.5 font-bold text-xs cursor-pointer rounded-xl h-10.5"
-          >
-            ยกเลิก
-          </button>
-          <button
-            id="btn-save-task"
-            onClick={handleSubmit}
-            disabled={saveMutation.isPending}
-            className="flex-1 btn btn-primary py-2.5 font-bold text-xs cursor-pointer rounded-xl h-10.5 shadow-lg 
-            shadow-purple-600/20 flex items-center justify-center gap-2"
-          >
-            {saveMutation.isPending ? (
-              <><Loader2 size={14} className="animate-spin" /> <span>กำลังบันทึก...</span></>
-            ) : (
-              <><Save size={14} /> <span>{isEdit ? "บันทึกการแก้ไข" : "บันทึกงานใหม่"}</span></>
             )}
-          </button>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="px-6 py-4 border-t border-white/5 flex gap-3 flex-shrink-0 bg-[#120e32]/40 backdrop-blur-md">
+            <button
+              type="button"
+              id="btn-cancel-modal"
+              onClick={onClose}
+              className="flex-1 btn btn-secondary py-2.5 font-bold text-xs cursor-pointer rounded-xl h-10.5"
+            >
+              ยกเลิก
+            </button>
+            <button
+              id="btn-save-task"
+              onClick={handleSubmit}
+              disabled={saveMutation.isPending}
+              className="flex-1 btn btn-primary py-2.5 font-bold text-xs cursor-pointer rounded-xl h-10.5 shadow-lg 
+            shadow-purple-600/20 flex items-center justify-center gap-2"
+            >
+              {saveMutation.isPending ? (
+                <><Loader2 size={14} className="animate-spin" /> <span>กำลังบันทึก...</span></>
+              ) : (
+                <><Save size={14} /> <span>{isEdit ? "บันทึกการแก้ไข" : "บันทึกงานใหม่"}</span></>
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </>

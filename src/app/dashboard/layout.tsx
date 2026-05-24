@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { Header } from "@/components/layout/Header"
 import { MobileNav } from "@/components/layout/MobileNav"
+import { GlobalShortcuts } from "@/components/layout/GlobalShortcuts"
 
 export default async function DashboardLayout({
   children,
@@ -22,6 +23,8 @@ export default async function DashboardLayout({
         </main>
       </div>
       <MobileNav />
+      <GlobalShortcuts />
     </div>
   )
 }
+
