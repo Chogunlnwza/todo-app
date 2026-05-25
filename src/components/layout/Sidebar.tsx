@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, CheckSquare, Tags, FolderOpen,
-  Settings, ChevronLeft, ChevronRight, Zap, Plus, Star
+  Settings, ChevronLeft, ChevronRight, Zap, Plus, Star, CheckCircle2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
@@ -12,6 +12,7 @@ import { useState } from "react"
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { href: "/dashboard/tasks", icon: CheckSquare, label: "งานทั้งหมด" },
+  { href: "/dashboard/completed", icon: CheckCircle2, label: "งานที่เสร็จแล้ว" },
   { href: "/dashboard/categories", icon: FolderOpen, label: "หมวดหมู่" },
   { href: "/dashboard/tags", icon: Tags, label: "แท็ก" },
   { href: "/dashboard/settings", icon: Settings, label: "ตั้งค่า" },
@@ -89,7 +90,6 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className={cn("flex-1 py-4 space-y-1.5", collapsed ? "px-2.5" : "px-4")}>
-        {/* Label */}
         {!collapsed && (
           <p className="text-indigo-400/40 text-[9px] uppercase tracking-widest font-extrabold px-3.5 py-1 mb-2">
             Main Menu
@@ -97,6 +97,7 @@ export function Sidebar() {
         )}
         {navItems.map((item) => {
           const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
+          const isCompleted = item.href === "/dashboard/completed"
           return (
             <Link
               key={item.href}
@@ -107,16 +108,28 @@ export function Sidebar() {
                 "flex items-center gap-3.5 rounded-xl text-[13px] font-medium transition-all duration-300 group relative",
                 collapsed ? "w-11 h-11 justify-center mx-auto" : "py-3 px-3.5",
                 isActive
-                  ? "bg-white/10 text-white border border-white/5 shadow-inner"
+                  ? isCompleted
+                    ? "bg-emerald-500/10 text-white border border-emerald-500/20"
+                    : "bg-white/10 text-white border border-white/5 shadow-inner"
                   : "text-indigo-200/50 hover:bg-white/5 hover:text-white"
               )}
             >
               {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-gradient-to-b from-purple-400 to-indigo-400 rounded-r-full shadow-glow" />
+                <span className={cn(
+                  "absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full",
+                  isCompleted
+                    ? "bg-gradient-to-b from-emerald-400 to-teal-400"
+                    : "bg-gradient-to-b from-purple-400 to-indigo-400"
+                )} />
               )}
               <item.icon
                 size={18}
-                className={cn("flex-shrink-0 transition-colors duration-300", isActive ? "text-purple-400" : "text-indigo-400/70 group-hover:text-purple-300")}
+                className={cn(
+                  "flex-shrink-0 transition-colors duration-300",
+                  isActive
+                    ? isCompleted ? "text-emerald-400" : "text-purple-400"
+                    : "text-indigo-400/70 group-hover:text-purple-300"
+                )}
               />
               {!collapsed && <span className="whitespace-nowrap">{item.label}</span>}
             </Link>

@@ -90,7 +90,9 @@ export default function TasksPage() {
     },
   })
 
-  const tasks = data?.tasks || []
+  const tasks = (data?.tasks || []).filter(
+  (t: { status: string }) => filters.status !== "ALL" || t.status !== "DONE")
+  
   const categories = catData?.categories || []
   const tags = tagData?.tags || []
 

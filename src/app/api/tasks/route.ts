@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { TaskStatus, Priority } from "@prisma/client"
+import { sendTaskAssignedEmail } from "@/lib/email"
 
 const createTaskSchema = z.object({
   title: z.string().min(1, "กรุณากรอกชื่องาน"),
@@ -30,25 +31,14 @@ export async function GET(req: NextRequest) {
   const dueDateFrom = searchParams.get("dueDateFrom")
   const dueDateTo = searchParams.get("dueDateTo")
   const archived = searchParams.get("archived") === "true"
-  const assignedToMe = searchParams.get("assignedToMe") === "true"
 
   const where: Record<string, unknown> = {
     isArchived: archived,
-  }
-
-  where.OR = [
-    { userId: session.user.id },
-    { assignees: { some: { userId: session.user.id } } },
-  ]
-
-  /*{if (assignedToMe) {
-    where.OR = [
+    OR: [
       { userId: session.user.id },
       { assignees: { some: { userId: session.user.id } } },
-    ]
-  } else {
-    where.userId = session.user.id
-  }}*/
+    ],
+  }
 
   if (status && status !== "ALL") where.status = status as TaskStatus
   if (priority && priority !== "ALL") where.priority = priority as Priority
@@ -85,6 +75,9 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  const userId = session.user.id as string
+  const userName = session.user.name as string | null
+
   try {
     const body = await req.json()
     const data = createTaskSchema.parse(body)
@@ -97,18 +90,16 @@ export async function POST(req: NextRequest) {
         priority: data.priority,
         dueDate: data.dueDate ? new Date(data.dueDate) : null,
         reminderAt: data.reminderAt ? new Date(data.reminderAt) : null,
-        userId: session.user.id,
+        userId,
         categoryId: data.categoryId || null,
         subtasks: data.subtasks
-          ? {
-            create: data.subtasks.map((s, i) => ({ title: s.title, orderIndex: i })),
-          }
+          ? { create: data.subtasks.map((s, i) => ({ title: s.title, orderIndex: i })) }
           : undefined,
         assignees: data.assigneeIds
           ? { create: data.assigneeIds.map((uid) => ({ userId: uid })) }
           : undefined,
         tags: data.tagIds
-          ? { create: data.tagIds.map((tid) => ({ tagId: tid })) }
+          ? { create: data.tagIds.filter((t) => t !== "").map((tid) => ({ tagId: tid })) }
           : undefined,
       },
       include: {
@@ -118,6 +109,23 @@ export async function POST(req: NextRequest) {
         tags: { include: { tag: true } },
       },
     })
+
+    // ── ส่งเมลแจ้งเตือนผู้รับผิดชอบทุกคนตอนสร้างงาน ──
+    if (task.assignees && task.assignees.length > 0) {
+      await Promise.allSettled(
+        task.assignees
+          .filter((a) => a.user.id !== userId) // ไม่ส่งหาตัวเอง
+          .map((a) =>
+            sendTaskAssignedEmail({
+              toEmail: a.user.email!,
+              toName: a.user.name || "ผู้ใช้งาน",
+              taskTitle: task.title,
+              assignedByName: userName || "ผู้ดูแลระบบ",
+              taskId: task.id,
+            })
+          )
+      )
+    }
 
     return NextResponse.json({ task }, { status: 201 })
   } catch (error) {

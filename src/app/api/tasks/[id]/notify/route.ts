@@ -35,8 +35,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       taskId: task.id,
     })
     return NextResponse.json({ success: true })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Send notify email error:", error)
-    return NextResponse.json({ error: "ส่งอีเมลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }, { status: 500 })
+    return NextResponse.json({ error: error.message || "ส่งอีเมลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }, { status: 500 })
   }
 }
