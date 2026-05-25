@@ -1,12 +1,14 @@
 import nodemailer from "nodemailer"
 
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-})
+function createTransporter() {
+    return nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+        },
+    })
+}
 
 export async function sendTaskAssignedEmail({
     toEmail,
@@ -21,7 +23,17 @@ export async function sendTaskAssignedEmail({
     assignedByName: string
     taskId: string
 }) {
-    const taskUrl = `${process.env.NEXTAUTH_URL}/dashboard/tasks?id=${taskId}`
+    const baseUrl = process.env.NEXTAUTH_URL?.replace(/\/$/, "") ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+
+    const taskUrl = `${baseUrl}/dashboard/tasks?id=${taskId}`
+
+    const transporter = createTransporter()
+
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.error("Email configuration missing: EMAIL_USER or EMAIL_PASS is not set")
+        throw new Error("Email configuration missing")
+    }
 
     const info = await transporter.sendMail({
         from: `"TaskFlow" <${process.env.EMAIL_USER}>`,
